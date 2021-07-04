@@ -9,7 +9,6 @@ import models
 import utils
 import tabulate
 
-
 parser = argparse.ArgumentParser(description='SGD/SWA training')
 parser.add_argument('--dir', type=str, default=None, required=True, help='training directory (default: None)')
 
@@ -54,6 +53,7 @@ torch.cuda.manual_seed(args.seed)
 print('Using model %s' % args.model)
 model_cfg = getattr(models, args.model)
 
+########### understand from here how to load new datasets #############
 print('Loading dataset %s from %s' % (args.dataset, args.data_path))
 ds = getattr(torchvision.datasets, args.dataset)
 path = os.path.join(args.data_path, args.dataset.lower())
@@ -75,12 +75,11 @@ loaders = {
         pin_memory=True
     )
 }
-num_classes = max(train_set.train_labels) + 1
+num_classes = max(train_set.targets) + 1
 
 print('Preparing model')
 model = model_cfg.base(*model_cfg.args, num_classes=num_classes, **model_cfg.kwargs)
 model.cuda()
-
 
 if args.swa:
     print('SWA training')
@@ -151,9 +150,12 @@ for epoch in range(start_epoch, args.epochs):
     else:
         test_res = {'loss': None, 'accuracy': None}
 
+    # if we are using swa and we are in the part of the swa and the modulu of the cycle is 0:
     if args.swa and (epoch + 1) >= args.swa_start and (epoch + 1 - args.swa_start) % args.swa_c_epochs == 0:
+        # calculate the avarage of the weights
         utils.moving_average(swa_model, model, 1.0 / (swa_n + 1))
         swa_n += 1
+        # evaluate test preformantce with the parameters
         if epoch == 0 or epoch % args.eval_freq == args.eval_freq - 1 or epoch == args.epochs - 1:
             utils.bn_update(loaders['train'], swa_model)
             swa_res = utils.eval(loaders['test'], swa_model, criterion)
